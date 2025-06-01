@@ -9,7 +9,6 @@ contract ERC20Airdroper is IUtilityContract, Ownable{
 
     constructor() Ownable(msg.sender) {}
 
-    address public deployer;
     IERC20 public tokens;
     uint256 public amount;
     address public treasury;
