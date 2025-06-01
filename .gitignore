@@ -1,3 +1,4 @@
 artifacts
 contracts/artifacts
 .deps
+.states
