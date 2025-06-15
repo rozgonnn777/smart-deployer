@@ -1,53 +1,75 @@
-//SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.29;
 
+import "../UtilityContract/AbstractUtilityContract.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "../IUtilityContract.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract ERC721Airdroper is IUtilityContract, Ownable{
+/// @title ERC721Airdroper - Utility contract for ERC721 tokens distributions (airdrop).
+/// @author rozghon7.
+/// @notice This contract provides a distribution functionality for ERC721 tokens.
+contract ERC721Airdroper is AbstractUtilityContract, Ownable {
+    /// @notice Initializes Ownable with deployer.
+    constructor() payable Ownable(msg.sender) {}
 
-    constructor() Ownable(msg.sender) {}
-
-    IERC721 public nft;
+    /// @notice The ERC721 token contract from which tokens will be distributed.
+    IERC721 public token;
+    /// @notice Address which holding tokens for distribution.
     address public treasury;
-    bool public initialized;
+    /// @notice Transfer limit of token transfers per airdrop call.
+    uint256 public constant MAX_AIRDROP_ITERATIONS = 77;
 
-    error AlreadyInitialized();
-    error ArraysLengthMissmatch();
-    error NeedToApprove();
+    /// @dev Reverts if arrays length is different.
+    error ArraysLengthMismatch();
+    /// @dev Reverts if tresuary doesn't approve tokens for ERC721Airdropper.
+    error NeedToApproveTokens();
+    /// @dev Reverts if iterations quantity more than MAX_AIRDROP_ITTERATIONS.
+    error IterationsQuantityMissmatch();
 
-    modifier notInitialized() {
-        require(!initialized, AlreadyInitialized());
-        _;
+    /// @notice Distributes tokens to recipients from treasury address.
+    /// @param receivers Users addresses to receive tokens.
+    /// @param tokenIds The tokens IDs for distribution.
+    function airdrop(address[] calldata receivers, uint256[] calldata tokenIds) external onlyOwner {
+        require(MAX_AIRDROP_ITERATIONS >= tokenIds.length, IterationsQuantityMissmatch());
+        require(receivers.length == tokenIds.length, ArraysLengthMismatch());
+        require(token.isApprovedForAll(treasury, address(this)), NeedToApproveTokens());
+
+        address treasuryAddress = treasury;
+
+        for (uint256 i = 0; i < tokenIds.length;) {
+            token.safeTransferFrom(treasuryAddress, receivers[i], tokenIds[i]);
+            unchecked {
+                ++i;
+            }
+        }
     }
 
-    function initialize(bytes memory _initData) external notInitialized returns(bool) {
-        
-        (address _tokenAddress, address _treasury, address _owner) = 
-        abi.decode(_initData, (address, address, address));
+    /// @inheritdoc IUtilityContract
+    function initialize(bytes memory _initData) external override notInitialized returns (bool) {
+        (address _deployManager, address _token, address _treasury, address _owner) =
+            abi.decode(_initData, (address, address, address, address));
 
-        nft = IERC721(_tokenAddress);
+        setDeployManager(_deployManager);
+        token = IERC721(_token);
         treasury = _treasury;
+
         Ownable.transferOwnership(_owner);
 
         initialized = true;
         return true;
     }
 
-    function getInitData(address _tokenAddress, address _treasury, address _owner) external pure returns(bytes memory) {
-
-        return abi.encode(_tokenAddress, _treasury, _owner);
-    }
-
-    function airdrop(address[] calldata receivers, uint256[] calldata id) external onlyOwner {
-        
-        require (receivers.length == id.length, ArraysLengthMissmatch());
-        require (nft.isApprovedForAll(treasury, address(this)) == true, NeedToApprove());
-        
-        for (uint256 i = 0; i < receivers.length; i++){
-
-            nft.safeTransferFrom(treasury, receivers[i], id[i]); 
-        } 
+    /// @notice Helper to encode constructor-style init data.
+    /// @param _deployManager Address of the DeployManager.
+    /// @param _token Address of ERC721 token contract.
+    /// @param _treasury Address holding the tokens.
+    /// @param _owner New owner of the contract.
+    /// @return Encoded initialization bytes.
+    function getInitData(address _deployManager, address _token, address _treasury, address _owner)
+        external
+        pure
+        returns (bytes memory)
+    {
+        return abi.encode(_deployManager, _token, _treasury, _owner);
     }
 }
